@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Đạo Sĩ Phi Thăng v4.0</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --accent: #ffd700;
+            --text-main: #f0f0f0;
+            --text-dim: #999;
+            --bar-bg: #333;
+            --hp-fill: #e53935;
+            --shield-fill: #2196f3;
+            --exp-fill: #43a047;
+            --rare: #b388ff;
+            --boss: #ff5252;
+            --crit-color: #ffb74d;
+            --gold-gradient: linear-gradient(135deg, #ffd700, #ff8c00);
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh; width: 100vw;
+            overflow: hidden;
+            display: flex; justify-content: center;
+        }
+
+        #game-wrapper {
+            width: 100%; max-width: 1400px; height: 100%;
+            display: flex; flex-direction: row;
+            position: relative;
+        }
+
+        /* --- VISUAL PANEL (LEFT/TOP) --- */
+        #visual-panel {
+            flex: 1.2; position: relative;
+            background: radial-gradient(circle at bottom, #2a2a2a 0%, #111 100%);
+            border-right: 1px solid #333;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+
+        #version-info {
+            position: absolute; top: 5px; left: 5px; 
+            font-size: 0.7rem; color: var(--text-dim); opacity: 0.6;
+            z-index: 50;
+        }
+        
+        #fps-display {
+            position: absolute; top: 5px; right: 5px;
+            font-size: 0.7rem; color: #00ff00; font-family: monospace;
+            z-index: 50; background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 3px;
+        }
+        
+        /* Sprites & Bars */
+        .sprite-container { position: absolute; width: 80px; height: 100px; display: flex; flex-direction: column; align-items: center; }
+        
+        #player-container { bottom: 25%; left: 15%; z-index: 10; }
+        #enemy-container { bottom: 25%; right: 15%; z-index: 5; }
+
+        .sprite { width: 64px; height: 64px; transition: transform 0.1s; position: relative; }
+        
+        #player {
+            background: linear-gradient(135deg, #4fc3f7, #0288d1);
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            box-shadow: 0 0 20px rgba(79, 195, 247, 0.4);
+        }
+        
+        #enemy {
+            background: linear-gradient(135deg, #ef5350, #c62828);
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+        }
+        .is-boss { transform: scale(1.5); filter: drop-shadow(0 0 10px red); }
+
+        /* Health Bars in Scene */
+        .mini-bar { width: 60px; height: 6px; background: #000; margin-bottom: 5px; border-radius: 3px; overflow: hidden; }
+        .mini-fill { height: 100%; width: 100%; transition: width 0.1s; }
+        .hp-fill { background: var(--hp-fill); }
+        .shield-fill { background: var(--shield-fill); }
+
+        /* Enemy Stats Text */
+        #enemy-stats-text {
+            position: absolute; top: 20%; right: 10%; 
+            padding: 5px 10px; background: rgba(0,0,0,0.5); 
+            border-radius: 4px; font-size: 0.8rem;
+            min-width: 150px; text-align: left;
+            border: 1px solid #444;
+        }
+        #enemy-stats-text div { margin: 2px 0; }
+        .boss-text { color: var(--boss); font-weight: bold; }
+
+        /* Animations */
+        .anim-atk { animation: lunge 0.15s forwards; }
+        .anim-hit { animation: shake 0.2s forwards; }
+        .anim-stun { filter: grayscale(1); opacity: 0.5; }
+
+        @keyframes lunge { 0% { transform: translateX(0); } 50% { transform: translateX(60px); } 100% { transform: translateX(0); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+        /* Floating Text */
+        .float-text {
+            position: absolute; font-weight: 800; pointer-events: none;
+            animation: floatUp 1s forwards; font-size: 1.2rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 20;
+            white-space: nowrap;
+        }
+        .crit-text { color: var(--crit-color) !important; font-size: 1.5rem; }
+        .evade-text { color: #00ff00 !important; font-size: 1.5rem; }
+        @keyframes floatUp { 0% { transform: translateY(0) scale(0.8); opacity: 1; } 100% { transform: translateY(-60px) scale(1); opacity: 0; } }
+
+        /* --- UI PANEL (RIGHT/BOTTOM) --- */
+        #ui-panel {
+            flex: 1; background-color: var(--panel-bg);
+            padding: 15px; display: flex; flex-direction: column;
+            gap: 10px; overflow-y: auto; border-left: 1px solid #333;
+        }
+
+        /* Header */
+        .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        #realm-info h2 { margin: 0; color: var(--accent); font-size: 1.4rem; }
+        #realm-info p { margin: 0; color: var(--text-dim); font-size: 0.9rem; }
+        
+        .header-btns { display: flex; gap: 8px; }
+        .header-btn { 
+            padding: 6px 12px; font-size: 0.8rem; font-weight: bold;
+            cursor: pointer; border-radius: 4px; border: 1px solid #555;
+            background: #333; color: #fff; transition: all 0.2s;
+        }
+        .header-btn:hover { background: #444; }
+        .btn-menu { background: var(--gold-gradient); color: #000; border: 1px solid #fff; }
+        .btn-menu:hover { background: linear-gradient(135deg, #ffe066, #ffb300); }
+
+        /* Bars */
+        .main-bar {
+            width: 100%; height: 24px; background: var(--bar-bg);
+            border-radius: 4px; position: relative; overflow: hidden;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+        }
+        .main-fill { height: 100%; width: 0%; transition: width 0.2s linear; }
+        .bar-text {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: bold; text-shadow: 1px 1px 2px black; z-index: 2; pointer-events: none;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+            background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;
+        }
+        .stat-box { text-align: center; }
+        .stat-label { font-size: 0.7rem; color: #888; text-transform: uppercase; }
+        .stat-val { font-size: 0.95rem; font-weight: bold; color: #eee; }
+        .c-gold { color: var(--accent); }
+
+        /* Buttons */
+        .btn {
+            border: none; border-radius: 4px; padding: 12px; font-weight: bold;
+            cursor: pointer; color: #fff; background: #333; transition: all 0.2s;
+            font-size: 0.9rem; position: relative; overflow: hidden;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-gold { 
+            background: var(--gold-gradient); 
+            color: #000;
+            box-shadow: 0 0 10px rgba(255, 165, 0, 0.5); 
+        }
+        .btn-blue { background: linear-gradient(135deg, #1976d2, #0d47a1); }
+        
+        .controls { display: flex; gap: 10px; }
+        .controls .btn { flex: 1; }
+
+        /* Skills */
+        .skills-section { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 5px 0; }
+        .skill-card {
+            background: #2a2a2a; border: 1px solid #444;
+            border-radius: 4px; padding: 5px; position: relative;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .skill-icon {
+            width: 100%; height: 40px; background: #37474f;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; margin-bottom: 5px; cursor: pointer;
+            position: relative; overflow: hidden;
+        }
+        .skill-cooldown {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 0%;
+            background: rgba(0,0,0,0.6); transition: height 0.1s linear;
+        }
+        .upgrade-btn {
+            width: 100%; font-size: 0.65rem; padding: 3px;
+            background: #444; border: none; color: #bbb; cursor: pointer;
+        }
+        .upgrade-btn:hover { background: #555; color: #fff; }
+
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 1px solid #444; }
+        .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #666; transition: color 0.1s; }
+        .tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+        .scroll-area {
+            flex: 1; background: rgba(0,0,0,0.2);
+            overflow-y: auto; padding: 10px; border-radius: 4px;
+            font-family: monospace; font-size: 0.85rem;
+        }
+        .shop-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 0; border-bottom: 1px solid #333;
+        }
+        .shop-item:last-child { border-bottom: none; }
+
+        /* Modal */
+        .modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(3px); 
+            display: none; align-items: center; justify-content: center; z-index: 100;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #2c2c2c; width: 90%; max-width: 500px;
+            padding: 25px; border-radius: 10px; 
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+            display: flex; flex-direction: column; gap: 15px;
+            max-height: 85vh; overflow-y: auto;
+            transform: scale(0.95); opacity: 0; transition: all 0.3s ease-out;
+        }
+        .modal.active .modal-content { transform: scale(1); opacity: 1; }
+        
+        .modal-title { 
+            font-size: 1.6rem; margin-bottom: 5px; color: var(--accent); 
+            text-align: center; text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+            border-bottom: 1px solid #444; padding-bottom: 10px;
+        }
+        .modal-section-title {
+            color: #64b5f6; margin: 10px 0 5px 0; font-size:1.1rem;
+            border-bottom: 1px dashed #444; padding-bottom: 5px;
+        }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+        .slider { width: 50%; }
+
+        /* Info Grid in Modal */
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem; }
+        .info-row { display: flex; justify-content: space-between; border-bottom: 1px solid #444; padding: 4px 0; }
+        .info-label { color: #aaa; }
+        .info-val { color: #fff; font-weight: bold; }
+        
+        /* Guide */
+        #tab-guide h3 { color: var(--accent); margin: 10px 0 5px 0; border-bottom: 1px dashed #333; }
+        #tab-guide p { margin: 5px 0; color: #ccc; }
+        .tip-box { background: rgba(255, 215, 0, 0.1); border-left: 3px solid var(--accent); padding: 8px; margin: 10px 0; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            #game-wrapper { flex-direction: column; }
+            #visual-panel { height: 35vh; flex: none; border-right: none; border-bottom: 1px solid #333; }
+            #ui-panel { height: 65vh; flex: none; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); font-size: 0.8rem; }
+            .skills-section { grid-template-columns: repeat(2, 1fr); }
+            .modal-content { width: 95%; padding: 15px; }
+            .info-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="version-info">Phiên bản: 4.0.0 (Thiên Nhãn)</div>
+<div id="fps-display">FPS: 60</div>
+
+<div id="game-wrapper">
+    <div id="visual-panel">
+        <div style="position: absolute; top: 10px; color: #555; letter-spacing: 3px; font-size: 0.8rem;">CẢNH GIỚI TU LUYỆN</div>
+        
+        <div id="player-container" class="sprite-container">
+            <div class="mini-bar"><div id="v-shield-bar" class="mini-fill shield-fill" style="width: 100%"></div></div>
+            <div id="player" class="sprite"></div>
+        </div>
+
+        <div id="enemy-container" class="sprite-container">
+            <div class="mini-bar"><div id="v-hp-bar" class="mini-fill hp-fill" style="width: 100%"></div></div>
+            <div id="enemy" class="sprite"></div>
+            <div id="enemy-stats-text"></div>
+        </div>
+
+        <div id="float-layer"></div>
+    </div>
+
+    <div id="ui-panel">
+        <div class="header-row">
+            <div id="realm-info">
+                <h2 id="realm-name">Phàm Nhân</h2>
+                <p id="stage-name">Giai Đoạn 1</p>
+            </div>
+            <div class="header-btns">
+                <button class="header-btn" onclick="ui.toggleDetailModal()">CHI TIẾT</button>
+                <button class="header-btn btn-menu" onclick="ui.toggleMenu()">MENU</button>
+            </div>
+        </div>
+
+        <div class="main-bar" style="background: #222;">
+            <div id="exp-bar" class="main-fill" style="background: var(--exp-fill);"></div>
+            <div id="exp-text" class="bar-text">0 / 10 EXP</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box"><div class="stat-label">Tốc Độ EXP</div><div id="val-rate" class="stat-val">0/s</div></div>
+            <div class="stat-box"><div class="stat-label">Linh Thạch</div><div id="val-stones" class="stat-val c-gold">0</div></div>
+            <div class="stat-box"><div class="stat-label">Tấn Công</div><div id="val-atk" class="stat-val">1</div></div>
+            <div class="stat-box"><div class="stat-label">Khiên Tối Đa</div><div id="val-shield" class="stat-val" style="color:#64b5f6">10</div></div>
+            <div class="stat-box"><div class="stat-label">Tốc Độ Đánh</div><div id="val-spd" class="stat-val">1.0s</div></div>
+            <div class="stat-box"><div class="stat-label">Chí Mạng</div><div id="val-crit" class="stat-val" style="color:var(--crit-color)">5%</div></div>
+            <div class="stat-box"><div class="stat-label">Hút Máu</div><div id="val-lifesteal" class="stat-val" style="color:#e57373">0%</div></div> 
+            <div class="stat-box"><div class="stat-label">Né Tránh</div><div id="val-evasion" class="stat-val" style="color:#4caf50">0%</div></div> 
+            <div class="stat-box"><div class="stat-label">Phản Đòn</div><div id="val-reflect" class="stat-val" style="color:#ff9800">0%</div></div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-blue" id="btn-cultivate" onclick="game.toggleCultivate()">Tu Luyện: BẬT</button>
+            <button class="btn btn-gold" id="btn-break" onclick="game.breakthrough()" disabled>ĐỘT PHÁ CẢNH GIỚI</button>
+        </div>
+
+        <div class="skills-section">
+            <div class="skill-card">
+                <div class="skill-icon" onclick="game.activateSkill('strike')">
+                    <span id="label-strike">Lôi Chưởng</span>
+                    <div id="cd-strike" class="skill-cooldown"></div>
+                </div>
+                <button class="upgrade-btn" onclick="game.upgradeSkill('strike')">Nâng: <span id="cost-strike">100</span> LT</button>
+            </div>
+            <div class="skill-card">
+                <div class="skill-icon" onclick="game.activateSkill('haste')">
+                    <span id="label-haste">Gia Tốc</span>
+                    <div id="cd-haste" class="skill-cooldown"></div>
+                </div>
+                <button class="upgrade-btn" onclick="game.upgradeSkill('haste')">Nâng: <span id="cost-haste">200</span> LT</button>
+            </div>
+            <div class="skill-card">
+                <div class="skill-icon" onclick="game.activateSkill('cleanse')">
+                    <span id="label-cleanse">Thanh Tâm</span>
+                    <div id="cd-cleanse" class="skill-cooldown"></div>
+                </div>
+                <button class="upgrade-btn" onclick="game.upgradeSkill('cleanse')">Nâng: <span id="cost-cleanse">500</span> LT</button>
+            </div>
+            <div class="skill-card">
+                <div class="skill-icon" onclick="game.activateSkill('vortex')">
+                    <span id="label-vortex">Kim Cang</span>
+                    <div id="cd-vortex" class="skill-cooldown"></div>
+                </div>
+                <button class="upgrade-btn" onclick="game.upgradeSkill('vortex')">Nâng: <span id="cost-vortex">1000</span> LT</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="ui.setTab('log')">Nhật Ký</div>
+            <div class="tab" onclick="ui.setTab('shop')">Linh Điền</div>
+            <div class="tab" onclick="ui.setTab('guide')">Sổ Tay</div>
+        </div>
+        <div id="tab-log" class="scroll-area">
+            <div style="color:var(--accent)">[4.0.0] Cập nhật Thiên Nhãn Chi Thuật.</div>
+            <div style="color:var(--accent)">Chào mừng Hữu. Bắt đầu hành trình tu luyện.</div>
+        </div>
+        <div id="tab-shop" class="scroll-area" style="display:none;"></div>
+        <div id="tab-guide" class="scroll-area" style="display:none;">
+            <h3>🌟 Có Gì Mới (v4.0)</h3>
+            <ul>
+                <li>**Thiên Nhãn (Chi Tiết):** Xem chính xác chỉ số của bản thân và kẻ địch để tối ưu hóa chiến thuật.</li>
+                <li>**Phản Đòn (Reflect):** Một chỉ số phòng thủ mới. Gây sát thương ngược lại kẻ địch khi bị tấn công.</li>
+                <li>**Cường Hóa Kỹ Năng:** Tăng sức mạnh cho mọi kỹ năng của bạn.</li>
+                <li>**Cài đặt FPS:** Giúp máy yếu chơi mượt hơn hoặc tiết kiệm pin.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div id="main-menu-modal" class="modal" onclick="if(event.target === this) ui.toggleMenu()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-title">MENU CHÍNH - BÍ CẢNH</div>
+        
+        <h3 class="modal-section-title">🖥️ HIỆU NĂNG (FPS)</h3>
+        <div class="setting-item">
+            <span>Giới hạn FPS:</span>
+            <select id="fps-select" style="padding:5px; background:#444; color:#fff; border:none;" onchange="game.setFPS(this.value)">
+                <option value="30">30 FPS (Tiết kiệm pin)</option>
+                <option value="60">60 FPS (Cân bằng)</option>
+                <option value="0">Không giới hạn (Mượt nhất)</option>
+            </select>
+        </div>
+
+        <h3 class="modal-section-title">🔊 CÀI ĐẶT ÂM THANH</h3>
+        <div class="setting-item">
+            <span>Nhạc Nền:</span>
+            <input type="range" min="0" max="100" class="slider" id="music-volume" oninput="audio.setVolume('music', this.value)">
+        </div>
+        <div class="setting-item">
+            <span>Hiệu Ứng:</span>
+            <input type="range" min="0" max="100" class="slider" id="sfx-volume" oninput="audio.setVolume('sfx', this.value)">
+        </div>
+
+        <h3 class="modal-section-title">💾 DỮ LIỆU</h3>
+        <button class="btn btn-blue" onclick="game.save(true)">💾 LƯU GAME</button>
+        <div style="display:flex; gap:10px;">
+            <button class="btn" onclick="game.exportSave()" style="flex:1; background:#555">Xuất Save</button>
+            <button class="btn" onclick="game.importSave()" style="flex:1; background:#555">Nhập Save</button>
+        </div>
+
+        <h3 class="modal-section-title" style="color:#ff8a65">⚠️ NGUY HIỂM</h3>
+        <button class="btn" style="background:#d32f2f" onclick="game.hardReset()">🗑️ XÓA TOÀN BỘ DỮ LIỆU</button>
+        
+        <button class="btn btn-gold" style="margin-top: 20px;" onclick="ui.toggleMenu()">ĐÓNG</button>
+    </div>
+</div>
+
+<div id="detail-modal" class="modal" onclick="if(event.target === this) ui.toggleDetailModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-title">THIÊN NHÃN CHI THUẬT</div>
+        
+        <h3 class="modal-section-title" style="color: var(--accent)">🧘 ĐẠO HỮU (STATS)</h3>
+        <div class="info-grid" id="player-details">
+            </div>
+
+        <h3 class="modal-section-title" style="color: #ef5350">👹 KẺ ĐỊCH HIỆN TẠI</h3>
+        <div class="info-grid" id="enemy-details">
+             </div>
+        
+        <button class="btn btn-gold" style="margin-top: 20px;" onclick="ui.toggleDetailModal()">ĐÓNG</button>
+    </div>
+</div>
+
+<script>
+/* --- CONSTANTS --- */
+const VERSION = "4.0.0";
+
+const REALMS = [
+    { name: "Phàm Nhân", exp: 10, stages: 1 },
+    { name: "Luyện Thể", exp: 2000, stages: 9 },
+    { name: "Ngưng Khí", exp: 15000, stages: 9 },
+    { name: "Trúc Cơ", exp: 80000, stages: 12 }, 
+    { name: "Kết Đan", exp: 500000, stages: 12 },
+    { name: "Nguyên Anh", exp: 5000000, stages: 12 },
+    { name: "Phân Thần", exp: 75000000, stages: 12 },
+    { name: "Vấn Đạo", exp: 500000000, stages: 12 },
+    { name: "Phi Thăng Tiên Giới", exp: 10000000000, stages: 100 }
+];
+
+const SHOP = [
+    // --- EXP & Resource ---
+    { id: 'incense', name: 'Linh Hương Thảo', desc: '+5 EXP/s cơ bản', baseCost: 15, type: 'exp_flat', val: 5 },
+    { id: 'scroll', name: 'Cổ Thư Exp', desc: '+10% EXP nhận', baseCost: 1000, type: 'exp_mult', val: 0.1 },
+    { id: 'stone_mult', name: 'Đan Dược Tài Nguyên', desc: '+10% Linh Thạch nhận', baseCost: 500, type: 'stone_mult', val: 0.1 },
+    { id: 'meditation', name: 'Tĩnh Tâm Phù', desc: '+1% Hiệu suất tu luyện', baseCost: 2000, type: 'exp_mult', val: 0.01 },
+    { id: 'mana_spring', name: 'Linh Mạch Mini', desc: '+20 EXP/s cơ bản', baseCost: 10000, type: 'exp_flat', val: 20 },
+    
+    // --- OFFENSE ---
+    { id: 'sword', name: 'Thiết Kiếm', desc: '+5 Tấn Công cơ bản', baseCost: 50, type: 'atk_flat', val: 5 },
+    { id: 'crit_chance', name: 'Bí Kíp Chí Mạng', desc: '+2% Tỉ lệ Chí Mạng', baseCost: 800, type: 'crit_chance', val: 0.02 },
+    { id: 'crit_dmg', name: 'Bí Kíp Phá Giáp', desc: '+0.1x Sát thương Chí Mạng', baseCost: 1500, type: 'crit_dmg', val: 0.1 },
+    { id: 'heavy_blade', name: 'Trọng Kiếm', desc: '+25 Tấn Công cơ bản', baseCost: 5000, type: 'atk_flat', val: 25 },
+    { id: 'bloody_blade', name: 'Huyết Kiếm', desc: '+1% Hút Máu', baseCost: 1500, type: 'lifesteal_flat', val: 0.01 }, 
+    // New v4.0
+    { id: 'skill_amp', name: 'Ngọc Cường Hóa', desc: '+2% Hiệu quả Kỹ Năng', baseCost: 4000, type: 'skill_amp', val: 0.02 },
+
+    // --- SPEED ---
+    { id: 'boots', name: 'Phong Lôi Bộ', desc: '+5% Tốc độ đánh', baseCost: 500, type: 'spd_mult', val: 0.05 },
+    { id: 'glove', name: 'Hộ Uyển Cường Hóa', desc: '+10% Tốc độ đánh', baseCost: 3000, type: 'spd_mult', val: 0.1 },
+    { id: 'swift_art', name: 'Thần Tốc Thuật', desc: '+20% Tốc độ đánh', baseCost: 25000, type: 'spd_mult', val: 0.2 },
+
+    // --- DEFENSE ---
+    { id: 'shield', name: 'Linh Thuẫn Phù', desc: '+20 Khiên Tối Đa', baseCost: 100, type: 'shield_flat', val: 20 },
+    { id: 'mantra', name: 'Thanh Tâm Chú', desc: '+5 Hồi Khiên/s', baseCost: 300, type: 'regen_flat', val: 5 },
+    { id: 'fortification', name: 'Trận Pháp Phòng Ngự', desc: '+10% Khiên Tối Đa', baseCost: 8000, type: 'shield_mult', val: 0.1 },
+    { id: 'shadow_cloak', name: 'Ám Ảnh Bào', desc: '+1% Né Tránh', baseCost: 2500, type: 'evasion_flat', val: 0.01 },
+    { id: 'stun_reduc', name: 'Đan Dược Kháng Tâm', desc: 'Giảm 5% hiệu ứng Stun', baseCost: 12000, type: 'stun_mult', val: 0.05 },
+    // New v4.0
+    { id: 'spike_armor', name: 'Giáp Gai', desc: '+2% Phản Đòn', baseCost: 5000, type: 'reflect_flat', val: 0.02 },
+
+    // --- UTILITY & REALM ---
+    { id: 'ring', name: 'Vòng May Mắn', desc: '+2% Tỉ lệ Boss', baseCost: 2000, type: 'boss_chance', val: 0.02 },
+    { id: 'skill_mastery', name: 'Tâm Pháp Kỹ Năng', desc: 'Giảm 5% CD Kỹ năng', baseCost: 15000, type: 'skill_cd_mult', val: 0.05 },
+    { id: 'realm_exp', name: 'Kinh Thư Cảnh Giới', desc: '+5% EXP Realm cơ bản', baseCost: 30000, type: 'realm_exp_mult', val: 0.05 },
+];
+
+/* --- STATE --- */
+const defState = {
+    realm: 0, stage: 0, exp: 0, stones: 0,
+    cultivating: true,
+    upgrades: {}, 
+    sfxVolume: 100, musicVolume: 50,
+    fpsLimit: 60, // New in 4.0
+    skills: { strike: { lv: 0 }, haste: { lv: 0 }, cleanse: { lv: 0 }, vortex: { lv: 0 } },
+    lastSave: Date.now()
+};
+SHOP.forEach(i => defState.upgrades[i.id] = 0);
+
+let state = JSON.parse(JSON.stringify(defState));
+
+let stats = {
+    expRate: 0, maxExp: 10,
+    atk: 1, atkSpd: 1, crit: 0.05, critDmg: 1.5,
+    maxShield: 10, shieldRegen: 1, shieldMult: 1,
+    stoneMult: 1, bossChance: 0.05,
+    atkMult: 1, costMult: 1, 
+    skillCDMult: 0, stunMult: 1,
+    realmExpMult: 1, bossDamageMult: 1,
+    lifesteal: 0, evasion: 0, 
+    reflect: 0, skillAmp: 0 // New stats
+};
+
+let combat = {
+    enemyHp: 10, enemyMax: 10, enemyAtk: 1, isBoss: false,
+    curShield: 10,
+    atkTimer: 0, enemyAtkTimer: 0,
+    stunTimer: 0,
+    skillCD: { strike: 0, haste: 0, cleanse: 0, vortex: 0 },
+    skillActive: { haste: 0, vortex: 0 }
+};
+
+/* --- CORE LOGIC --- */
+const game = {
+    loopId: null,
+    lastTime: Date.now(),
+    frameCount: 0,
+    lastFpsTime: Date.now(),
+
+    init() {
+        this.load();
+        this.recalc();
+        this.spawnEnemy();
+        ui.initShop();
+        ui.update();
+        audio.init(); 
+        
+        // FPS Settings
+        document.getElementById('fps-select').value = state.fpsLimit;
+
+        this.lastTime = Date.now();
+        this.loopId = requestAnimationFrame(() => this.tick());
+        setInterval(() => this.save(), 30000);
+    },
+
+    setFPS(val) {
+        state.fpsLimit = parseInt(val);
+        ui.log(`Đã đặt giới hạn FPS: ${state.fpsLimit === 0 ? "Vô hạn" : state.fpsLimit}`, "norm");
+    },
+
+    tick() {
+        const now = Date.now();
+        const elapsed = now - this.lastTime;
+        
+        // FPS Throttling
+        if (state.fpsLimit > 0 && elapsed < (1000 / state.fpsLimit)) {
+            this.loopId = requestAnimationFrame(() => this.tick());
+            return;
+        }
+
+        const dt = elapsed / 1000;
+        this.lastTime = now;
+
+        // FPS Counter
+        this.frameCount++;
+        if (now - this.lastFpsTime >= 1000) {
+            document.getElementById('fps-display').innerText = `FPS: ${this.frameCount}`;
+            this.frameCount = 0;
+            this.lastFpsTime = now;
+        }
+
+        // Logic
+        this.updateCultivation(dt);
+        this.updateCooldowns(dt);
+        this.updateRegen(dt);
+        this.updateCombat(dt);
+
+        ui.renderFrame(dt);
+        this.loopId = requestAnimationFrame(() => this.tick());
+    },
+
+    updateCultivation(dt) {
+        if (state.cultivating && combat.stunTimer <= 0) {
+            state.exp += stats.expRate * dt;
+            if (state.exp > stats.maxExp) state.exp = stats.maxExp;
+        }
+    },
+
+    updateCooldowns(dt) {
+        if (combat.stunTimer > 0) combat.stunTimer -= dt;
+        
+        // Skill Cooldowns
+        for (let k in combat.skillCD) {
+            if (combat.skillCD[k] > 0) combat.skillCD[k] -= dt * (1 + stats.skillCDMult);
+        }
+        
+        // Active Buffs
+        let needsRecalc = false;
+        for (let k in combat.skillActive) {
+            if (combat.skillActive[k] > 0) {
+                combat.skillActive[k] -= dt;
+                if (combat.skillActive[k] <= 0) needsRecalc = true;
+            }
+        }
+        if (needsRecalc) this.recalc();
+    },
+
+    updateRegen(dt) {
+        if (combat.stunTimer <= 0 && combat.curShield < stats.maxShield) {
+            combat.curShield += stats.shieldRegen * dt;
+            if (combat.curShield > stats.maxShield) combat.curShield = stats.maxShield;
+        }
+    },
+
+    updateCombat(dt) {
+        if (combat.stunTimer > 0) return;
+
+        // Player Hit
+        combat.atkTimer += dt;
+        if (combat.atkTimer >= (1.5 / stats.atkSpd)) {
+            combat.atkTimer = 0;
+            this.attackEnemy();
+        }
+
+        // Enemy Hit
+        if (combat.enemyHp > 0) {
+            combat.enemyAtkTimer += dt;
+            if (combat.enemyAtkTimer >= 2.0) { // Enemy hits every 2s
+                combat.enemyAtkTimer = 0;
+                this.enemyHitsPlayer();
+            }
+        }
+    },
+
+    recalc() {
+        const r = REALMS[state.realm];
+        
+        // Reset Stats
+        stats.shieldMult = 1; stats.atkMult = 1; stats.critDmg = 1.5; stats.stoneMult = 1; 
+        stats.costMult = 1; stats.skillCDMult = 0; stats.stunMult = 1;
+        stats.realmExpMult = 1; stats.bossDamageMult = 1;
+        stats.lifesteal = 0; stats.evasion = 0; stats.reflect = 0; stats.skillAmp = 0;
+        
+        // Base Stats from Realm
+        let flatExp = 5 + (state.realm * 10);
+        let flatAtk = 1 + (state.realm * 5);
+        let flatShield = 10 + (state.realm * 20);
+        
+        let baseCrit = 0.05;
+        let baseBossChance = 0.05;
+        let baseSpdMult = 1;
+
+        // Apply Upgrades
+        SHOP.forEach(item => {
+            const lv = state.upgrades[item.id];
+            if (lv > 0) {
+                const val = item.val * lv;
+                switch (item.type) {
+                    case 'exp_flat': flatExp += val; break;
+                    case 'exp_mult': stats.expMult = (stats.expMult || 1) + val; break; // Note: simplified logic
+                    case 'atk_flat': flatAtk += val; break;
+                    case 'shield_flat': flatShield += val; break;
+                    case 'shield_mult': stats.shieldMult += val; break;
+                    case 'regen_flat': stats.shieldRegen = (stats.shieldRegen || 1) + val; break;
+                    case 'spd_mult': baseSpdMult += val; break;
+                    case 'crit_chance': baseCrit += val; break;
+                    case 'crit_dmg': stats.critDmg += val; break;
+                    case 'lifesteal_flat': stats.lifesteal += val; break;
+                    case 'evasion_flat': stats.evasion += val; break;
+                    case 'reflect_flat': stats.reflect += val; break; // New
+                    case 'skill_amp': stats.skillAmp += val; break; // New
+                    case 'stun_mult': stats.stunMult *= (1 - item.val * lv); break;
+                    case 'stone_mult': stats.stoneMult += val; break;
+                    case 'boss_chance': baseBossChance += val; break;
+                    case 'skill_cd_mult': stats.skillCDMult += val; break;
+                    case 'realm_exp_mult': stats.realmExpMult += val; break;
+                }
+            }
+        });
+        
+        // Realm Scaling
+        flatExp *= stats.realmExpMult;
+
+        // Apply Final Calcs
+        stats.expRate = flatExp * (stats.expMult || 1);
+        stats.maxExp = (r.exp / r.stages) * (1 + state.stage * 0.1); 
+        stats.atk = flatAtk * stats.atkMult;
+        
+        // Haste Skill
+        if (combat.skillActive.haste > 0) {
+             let hasteBonus = 0.5 + (state.skills.haste.lv * 0.1 * (1 + stats.skillAmp));
+             baseSpdMult += hasteBonus;
+        }
+
+        stats.atkSpd = baseSpdMult;
+        stats.maxShield = flatShield * stats.shieldMult;
+        stats.crit = Math.min(1.0, baseCrit);
+        stats.bossChance = baseBossChance;
+
+        if (combat.curShield > stats.maxShield) combat.curShield = stats.maxShield;
+    },
+
+    spawnEnemy() {
+        combat.isBoss = Math.random() < stats.bossChance;
+        let baseHp = 20 * Math.pow(1.5, state.realm) * (1 + state.stage * 0.2);
+        let baseDmg = stats.maxShield * 0.15; 
+
+        if (combat.isBoss) {
+            combat.enemyMax = baseHp * 10;
+            combat.enemyAtk = baseDmg * 2;
+            ui.log("Ma Vương xuất hiện!", "boss");
+        } else {
+            combat.enemyMax = baseHp;
+            combat.enemyAtk = baseDmg;
+        }
+        
+        // Scale Enemy Dmg
+        combat.enemyAtk = Math.max(1, combat.enemyAtk + state.realm * 0.5 + state.stage * 0.1); 
+        combat.enemyHp = combat.enemyMax;
+        combat.enemyAtkTimer = 0;
+        
+        ui.updateSprite(combat.isBoss);
+        ui.updateEnemyStats();
+    },
+
+    attackEnemy() {
+        audio.playSFX('hit');
+        ui.animPlayerAtk();
+        
+        let isCrit = Math.random() < stats.crit;
+        let dmg = stats.atk * (isCrit ? stats.critDmg : 1);
+        if (combat.isBoss) dmg *= stats.bossDamageMult;
+        
+        combat.enemyHp -= dmg;
+        ui.floatText(ui.fmt(dmg) + (isCrit?"!":""), "enemy", isCrit?`var(--crit-color)`:"#fff", isCrit);
+
+        // Lifesteal
+        if (stats.lifesteal > 0) {
+            const lifeHeal = dmg * stats.lifesteal;
+            combat.curShield = Math.min(stats.maxShield, combat.curShield + lifeHeal);
+            if (lifeHeal > 0.5) ui.floatText(`+${ui.fmt(lifeHeal)}`, "player", "#e57373");
+        }
+
+        if (combat.enemyHp <= 0) this.killEnemy();
+    },
+
+    enemyHitsPlayer() {
+        // Evasion
+        if (Math.random() < stats.evasion) {
+            audio.playSFX('evade');
+            ui.floatText("NÉ!", "player", "#00ff00", false, true);
+            return;
+        }
+
+        audio.playSFX('block');
+        ui.animEnemyAtk();
+        
+        let dmg = combat.enemyAtk;
+        
+        // Vortex Skill Mitigation
+        if (combat.skillActive.vortex > 0) {
+            let reduction = 0.5 + (state.skills.vortex.lv * 0.05 * (1 + stats.skillAmp));
+            dmg *= (1 - Math.min(0.9, reduction));
+        }
+
+        // Reflect Logic (New v4.0)
+        if (stats.reflect > 0) {
+            let refDmg = dmg * stats.reflect;
+            combat.enemyHp -= refDmg;
+            ui.floatText(`Phản ${ui.fmt(refDmg)}`, "enemy", "#ff9800");
+            if (combat.enemyHp <= 0) this.killEnemy(); // Enemy can die from reflect
+        }
+
+        if (combat.curShield >= dmg) {
+            combat.curShield -= dmg;
+            ui.floatText("Chặn", "player", "#64b5f6");
+        } else {
+            combat.curShield = 0;
+            // Shield Break
+            let stunTime = 3.0 * stats.stunMult; 
+            combat.stunTimer = Math.max(0.5, stunTime);
+            
+            ui.log(`Khiên vỡ! Choáng ${combat.stunTimer.toFixed(1)}s!`, "warn");
+            ui.floatText("BẤT ĐỘNG", "player", "#e53935");
+            document.getElementById('player').classList.add('anim-stun');
+            setTimeout(() => document.getElementById('player').classList.remove('anim-stun'), combat.stunTimer * 1000);
+            audio.playSFX('stun');
+        }
+    },
+
+    killEnemy() {
+        audio.playSFX(combat.isBoss ? 'boss_kill' : 'kill');
+        let loot = (1 + state.realm) * (1 + state.stage);
+        if (combat.isBoss) loot *= 15;
+        
+        loot = Math.floor(loot * stats.stoneMult);
+        state.stones += loot;
+        state.exp += stats.expRate * 0.5;
+
+        ui.floatText(`+${ui.fmt(loot)} LT`, "player", "#ffd700");
+        this.spawnEnemy();
+    },
+
+    activateSkill(id) {
+        if (combat.skillCD[id] > 0 || combat.stunTimer > 0) return;
+
+        let lv = state.skills[id].lv;
+        let amp = 1 + stats.skillAmp;
+        
+        if (id === 'strike') {
+            audio.playSFX('skill_strike');
+            let dmg = stats.atk * (5 + lv * 2) * amp;
+            let shieldDmg = combat.enemyHp * 0.5; // True Dmg
+            
+            combat.enemyHp -= (dmg + shieldDmg);
+            ui.floatText(ui.fmt(dmg + shieldDmg), "enemy", "#b388ff");
+            ui.animPlayerAtk();
+            if (combat.enemyHp <= 0) this.killEnemy();
+            combat.skillCD.strike = 10; 
+        }
+        if (id === 'haste') {
+            audio.playSFX('skill_buff');
+            combat.skillActive.haste = (5 + (lv * 0.5)) * amp;
+            combat.skillCD.haste = 20;
+            this.recalc();
+            ui.floatText("GIA TỐC", "player", "#fff");
+        }
+        if (id === 'cleanse') {
+            audio.playSFX('skill_heal');
+            let healPct = (0.3 + (lv * 0.05)) * amp;
+            let healAmount = stats.maxShield * healPct;
+            combat.curShield = Math.min(stats.maxShield, combat.curShield + healAmount);
+            ui.floatText(`+${ui.fmt(healAmount)} Khiên`, "player", "#00ffff");
+            combat.skillCD.cleanse = 30;
+        }
+        if (id === 'vortex') {
+            audio.playSFX('skill_defense');
+            combat.skillActive.vortex = (4 + (lv * 0.5)) * amp;
+            combat.skillCD.vortex = 45;
+            this.recalc();
+            ui.floatText("KIM CANG", "player", "#ffd700");
+        }
+    },
+
+    upgradeSkill(id) {
+        let lv = state.skills[id].lv;
+        let baseCost = { strike: 100, haste: 200, cleanse: 500, vortex: 1000 }[id];
+        let cost = Math.floor(baseCost * Math.pow(2.5, lv) * stats.costMult);
+        
+        if (state.stones >= cost) {
+            audio.playSFX('upgrade');
+            state.stones -= cost;
+            state.skills[id].lv++;
+            this.recalc();
+            ui.update();
+        } else {
+            audio.playSFX('error');
+        }
+    },
+
+    buy(id) {
+        let item = SHOP.find(x=>x.id == id);
+        let cost = Math.floor(item.baseCost * Math.pow(1.5, state.upgrades[id]) * stats.costMult);
+        if (state.stones >= cost) {
+            audio.playSFX('buy');
+            state.stones -= cost;
+            state.upgrades[id]++;
+            this.recalc();
+            ui.updateShop();
+            ui.update();
+        } else {
+            audio.playSFX('error');
+        }
+    },
+
+    breakthrough() {
+        if (state.exp < stats.maxExp) return;
+        audio.playSFX('breakthrough');
+        let r = REALMS[state.realm];
+        state.stage++;
+        state.exp = 0;
+        combat.curShield = stats.maxShield;
+        
+        if (state.stage >= r.stages) {
+            if (state.realm < REALMS.length - 1) {
+                state.realm++; state.stage = 0;
+                ui.log(`Đột phá thành công: ${REALMS[state.realm].name}!`, "boss");
+            } else { state.stage--; }
+        } else {
+            ui.log(`Đạt tới Giai Đoạn ${state.stage+1}`, "norm");
+        }
+        this.recalc(); this.spawnEnemy(); this.save(); ui.update();
+    },
+
+    toggleCultivate() { 
+        state.cultivating = !state.cultivating; 
+        audio.playSFX(state.cultivating ? 'meditate_on' : 'meditate_off');
+        ui.update(); 
+    },
+
+    save(manual) {
+        state.sfxVolume = document.getElementById('sfx-volume').value;
+        state.musicVolume = document.getElementById('music-volume').value;
+        localStorage.setItem('daoist_v4', JSON.stringify(state));
+        ui.log("Game đã được lưu.", "norm");
+        if (manual) alert("Đã lưu thành công!");
+    },
+    load() {
+        let s = localStorage.getItem('daoist_v4');
+        if (s) {
+            let loaded = JSON.parse(s);
+            state = { ...defState, ...loaded, upgrades: { ...defState.upgrades, ...loaded.upgrades }, skills: { ...defState.skills, ...loaded.skills } };
+            // Load Settings
+            if(loaded.fpsLimit !== undefined) state.fpsLimit = loaded.fpsLimit;
+            ui.log(`Tải game thành công.`, "accent");
+        }
+    },
+    hardReset() {
+        if(confirm("Xóa toàn bộ tiến trình?")) { localStorage.removeItem('daoist_v4'); location.reload(); }
+    },
+    exportSave() { this.save(); navigator.clipboard.writeText(btoa(JSON.stringify(state))); alert("Đã copy Save!"); },
+    importSave() {
+        let str = prompt("Dán Save:");
+        if (str) { try { localStorage.setItem('daoist_v4', atob(str)); location.reload(); } catch(e) { alert("Lỗi save."); } }
+    }
+};
+
+/* --- AUDIO --- */
+const audio = {
+    sfx: {}, music: null,
+    init() {
+        const create = (id) => { 
+            // Placeholder audio generation or real URLs would go here. 
+            // Using silent/dummy logic for code conciseness in this version.
+            return new Audio(); 
+        };
+        ['hit','block','kill','boss_kill','upgrade','buy','error','breakthrough','stun','meditate_on','meditate_off','skill_strike','skill_buff','skill_heal','skill_defense','evade'].forEach(k => this.sfx[k] = create(k));
+        
+        this.music = create('music'); this.music.loop = true;
+        
+        document.getElementById('sfx-volume').value = state.sfxVolume;
+        document.getElementById('music-volume').value = state.musicVolume;
+        this.setVolume('sfx', state.sfxVolume); this.setVolume('music', state.musicVolume);
+    },
+    setVolume(type, val) {
+        if(type === 'sfx') state.sfxVolume = val; 
+        else state.musicVolume = val; 
+    },
+    playSFX(key) { 
+        // Logic to play sound if volume > 0
+    }
+};
+
+/* --- UI --- */
+const ui = {
+    fmt: (n) => {
+        if (n >= 1e12) return (n/1e12).toFixed(2)+"T";
+        if (n >= 1e9) return (n/1e9).toFixed(2)+"B";
+        if (n >= 1e6) return (n/1e6).toFixed(2)+"M";
+        if (n >= 1e3) return (n/1e3).toFixed(1)+"k";
+        return Math.floor(n);
+    },
+    
+    initShop() {
+        const c = document.getElementById('tab-shop'); c.innerHTML = "";
+        SHOP.forEach(item => {
+            let div = document.createElement('div');
+            div.className = 'shop-item';
+            div.innerHTML = `<div><div style="font-weight:bold; color:#fff">${item.name}</div><div style="font-size:0.8em; color:#888">${item.desc}</div></div><button class="btn btn-blue" id="buy-${item.id}" style="font-size:0.8rem; padding:6px 12px;">Mua</button>`;
+            div.querySelector('button').onclick = () => game.buy(item.id);
+            c.appendChild(div);
+        });
+        this.updateShop();
+    },
+
+    updateShop() {
+        SHOP.forEach(item => {
+            let cost = Math.floor(item.baseCost * Math.pow(1.5, state.upgrades[item.id]) * stats.costMult);
+            let btn = document.getElementById(`buy-${item.id}`);
+            if (btn) {
+                btn.innerText = `${ui.fmt(cost)} LT (Lv ${state.upgrades[item.id]})`;
+                btn.disabled = state.stones < cost;
+            }
+        });
+    },
+
+    update() {
+        document.getElementById('realm-name').innerText = REALMS[state.realm].name;
+        document.getElementById('stage-name').innerText = `Giai Đoạn ${state.stage + 1}`;
+        document.getElementById('val-rate').innerText = this.fmt(stats.expRate) + "/s";
+        document.getElementById('val-stones').innerText = this.fmt(state.stones);
+        document.getElementById('val-atk').innerText = this.fmt(stats.atk);
+        document.getElementById('val-shield').innerText = this.fmt(stats.maxShield);
+        document.getElementById('val-spd').innerText = (1.5/stats.atkSpd).toFixed(2) + "s";
+        document.getElementById('val-crit').innerText = (stats.crit * 100).toFixed(1) + "%";
+        document.getElementById('val-lifesteal').innerText = (stats.lifesteal * 100).toFixed(1) + "%";
+        document.getElementById('val-evasion').innerText = (stats.evasion * 100).toFixed(1) + "%";
+        document.getElementById('val-reflect').innerText = (stats.reflect * 100).toFixed(1) + "%";
+
+        const bCult = document.getElementById('btn-cultivate');
+        bCult.innerText = state.cultivating ? "TU LUYỆN: BẬT" : "TU LUYỆN: TẮT";
+        bCult.style.background = state.cultivating ? "#2e7d32" : "#333";
+
+        const bBreak = document.getElementById('btn-break');
+        if (state.exp >= stats.maxExp) {
+            bBreak.disabled = false; bBreak.innerText = "ĐỘT PHÁ!"; bBreak.classList.add('btn-gold');
+        } else {
+            bBreak.disabled = true; bBreak.innerText = "TÍCH LŨY..."; bBreak.classList.remove('btn-gold');
+        }
+        
+        // Skill Labels
+        ['strike','haste','cleanse','vortex'].forEach(id => {
+            let lv = state.skills[id].lv;
+            let base = { strike: 100, haste: 200, cleanse: 500, vortex: 1000 }[id];
+            let cost = Math.floor(base * Math.pow(2.5, lv) * stats.costMult);
+            document.getElementById(`cost-${id}`).innerText = this.fmt(cost);
+            let name = { strike:'Lôi Chưởng', haste:'Gia Tốc', cleanse:'Thanh Tâm', vortex:'Kim Cang' }[id];
+            document.getElementById(`label-${id}`).innerText = `${name} (Lv ${lv})`;
+        });
+
+        this.updateShop();
+        this.updateDetailModal(); // Live update details if open
+    },
+
+    renderFrame(dt) {
+        document.getElementById('exp-bar').style.width = ((state.exp / stats.maxExp) * 100) + "%";
+        document.getElementById('exp-text').innerText = `${this.fmt(state.exp)} / ${this.fmt(stats.maxExp)} EXP`;
+        document.getElementById('v-hp-bar').style.width = Math.max(0, (combat.enemyHp / combat.enemyMax) * 100) + "%";
+        document.getElementById('v-shield-bar').style.width = Math.max(0, (combat.curShield / stats.maxShield) * 100) + "%";
+
+        ['strike','haste','cleanse','vortex'].forEach(id => {
+            let max = { strike: 10, haste: 20, cleanse: 30, vortex: 45 }[id];
+            document.getElementById(`cd-${id}`).style.height = (Math.max(0, combat.skillCD[id])/max)*100 + "%";
+        });
+
+        if (Math.random() < 0.1) this.update();
+        this.updateEnemyStats();
+    },
+    
+    updateEnemyStats() {
+        const eStats = document.getElementById('enemy-stats-text');
+        eStats.innerHTML = `<div>${combat.isBoss ? '<span class="boss-text">BOSS</span>' : 'Thường'}</div><div>HP: ${this.fmt(combat.enemyHp)}</div><div>DMG: ${this.fmt(combat.enemyAtk)}</div>`;
+    },
+
+    updateSprite(isBoss) {
+        const e = document.getElementById('enemy');
+        if (isBoss) e.classList.add('is-boss'); else e.classList.remove('is-boss');
+    },
+
+    animPlayerAtk() {
+        const p = document.getElementById('player'); p.classList.remove('anim-atk'); void p.offsetWidth; p.classList.add('anim-atk');
+        const e = document.getElementById('enemy'); setTimeout(() => { e.classList.remove('anim-hit'); void e.offsetWidth; e.classList.add('anim-hit'); }, 100);
+    },
+
+    animEnemyAtk() {
+        const e = document.getElementById('enemy'); e.classList.remove('anim-atk'); e.style.transform = "scaleX(-1)"; void e.offsetWidth; e.classList.add('anim-atk');
+        setTimeout(()=>e.style.transform = "", 200);
+        const p = document.getElementById('player'); setTimeout(() => { p.classList.remove('anim-hit'); void p.offsetWidth; p.classList.add('anim-hit'); }, 100);
+    },
+
+    floatText(msg, target, color, isCrit=false, isEvade=false) { 
+        const el = document.createElement('div'); el.className = 'float-text'; 
+        if (isCrit) el.classList.add('crit-text'); if (isEvade) el.classList.add('evade-text');
+        el.innerText = msg; el.style.color = color;
+        const rect = document.getElementById(target).getBoundingClientRect();
+        const parent = document.getElementById('visual-panel').getBoundingClientRect();
+        el.style.left = (rect.left - parent.left + (target === 'player' ? 20 : 20)) + "px";
+        el.style.top = (rect.top - parent.top - 20) + "px";
+        document.getElementById('float-layer').appendChild(el);
+        setTimeout(()=>el.remove(), 1000);
+    },
+
+    log(msg, type) {
+        const d = document.createElement('div');
+        d.innerText = `[${new Date().toLocaleTimeString('vi-VN')}] ${msg}`;
+        d.style.color = type === 'boss' ? 'var(--boss)' : (type === 'warn' ? '#e53935' : (type === 'accent' ? 'var(--accent)' : '#aaa'));
+        d.style.borderBottom = "1px solid #333";
+        const c = document.getElementById('tab-log'); c.prepend(d);
+        if(c.children.length > 30) c.lastChild.remove();
+    },
+
+    toggleMenu() {
+        const m = document.getElementById('main-menu-modal');
+        m.classList.toggle('active');
+    },
+
+    toggleDetailModal() {
+        const m = document.getElementById('detail-modal');
+        m.classList.toggle('active');
+        if(m.classList.contains('active')) this.updateDetailModal();
+    },
+
+    updateDetailModal() {
+        if (!document.getElementById('detail-modal').classList.contains('active')) return;
+        
+        const row = (l, v, c='#fff') => `<div class="info-row"><span class="info-label">${l}</span><span class="info-val" style="color:${c}">${v}</span></div>`;
+        
+        const pDiv = document.getElementById('player-details');
+        pDiv.innerHTML = 
+            row("Cảnh Giới", REALMS[state.realm].name, "var(--accent)") +
+            row("Tấn Công", this.fmt(stats.atk)) +
+            row("Khiên", `${this.fmt(combat.curShield)} / ${this.fmt(stats.maxShield)}`, "#64b5f6") +
+            row("Hồi Khiên", `+${this.fmt(stats.shieldRegen)}/s`, "#64b5f6") +
+            row("Chí Mạng", `${(stats.crit*100).toFixed(1)}% (x${stats.critDmg.toFixed(1)})`, "var(--crit-color)") +
+            row("Tốc Đánh", `${(1.5/stats.atkSpd).toFixed(2)}s`) +
+            row("Hút Máu", `${(stats.lifesteal*100).toFixed(1)}%`, "#e57373") +
+            row("Né Tránh", `${(stats.evasion*100).toFixed(1)}%`, "#4caf50") +
+            row("Phản Đòn", `${(stats.reflect*100).toFixed(1)}%`, "#ff9800") +
+            row("Cường Hóa KN", `+${(stats.skillAmp*100).toFixed(1)}%`, "#b388ff");
+
+        const eDiv = document.getElementById('enemy-details');
+        eDiv.innerHTML = 
+            row("Loại", combat.isBoss ? "BOSS Ma Vương" : "Quái Thường", combat.isBoss ? "var(--boss)" : "#fff") +
+            row("Sinh Lực", `${this.fmt(combat.enemyHp)} / ${this.fmt(combat.enemyMax)}`) +
+            row("Sức Mạnh", this.fmt(combat.enemyAtk), "#e53935") +
+            row("Tốc Đánh", "2.00s") +
+            row("Hệ Số Máu", `${(Math.pow(1.5, state.realm)).toFixed(1)}x Realm`);
+    },
+
+    setTab(t) {
+        ['log','shop','guide'].forEach(x => document.getElementById('tab-'+x).style.display = 'none');
+        document.getElementById('tab-'+t).style.display = 'block';
+        document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
+        // Simple logic for active tab highlight
+        const map = {'log':0, 'shop':1, 'guide':2};
+        document.querySelectorAll('.tab')[map[t]].classList.add('active');
+    }
+};
+
+window.onload = () => game.init();
+</script>
+</body>
+</html>
